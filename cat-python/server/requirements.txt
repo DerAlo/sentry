@@ -1,0 +1,7 @@
+# Server Requirements (Cross-platform: Windows + Linux)
+flask==3.0.0
+websockets==12.0
+opencv-python==4.8.1.78
+pyserial==3.5
+numpy==1.24.3
+uvloop==0.19.0; sys_platform != "win32"  # Performance boost (Linux only)

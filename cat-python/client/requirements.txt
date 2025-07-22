@@ -1,0 +1,30 @@
+# Python CUDA Client Dependencies
+# High-performance computer vision für Cat Tracking
+
+# Core ML & Computer Vision
+torch>=2.1.0                # PyTorch with CUDA support
+torchvision>=0.16.0         # PyTorch computer vision utilities
+ultralytics>=8.0.0          # Modern YOLO implementation
+opencv-python>=4.8.0        # OpenCV for image processing
+pillow>=10.0.0              # PIL for image handling
+numpy>=1.24.0               # Numerical computing
+
+# GPU Acceleration
+tensorrt>=8.6.0             # NVIDIA TensorRT optimization (if available)
+pycuda>=2022.2              # CUDA Python bindings
+
+# GUI Framework
+tkinter                     # Built-in Python GUI (usually included)
+
+# Networking & Async
+aiohttp>=3.8.0              # Async HTTP client
+websockets>=11.0.0          # WebSocket client
+requests>=2.31.0            # HTTP requests
+
+# Utilities
+tqdm>=4.65.0                # Progress bars
+psutil>=5.9.0               # System monitoring
+
+# Development & Debugging
+ipython>=8.15.0             # Interactive Python shell
+pytest>=7.4.0              # Testing framework
