@@ -5,14 +5,14 @@
 
 ### 1. Server Setup (Raspberry Pi)
 ```bash
-cd cat-python/server
+cd server
 pip install -r requirements.txt
 python camera_server.py
 ```
 
 ### 2. Client Setup (PC mit CUDA GPU)
 ```bash
-cd cat-python/client
+cd client
 pip install -r requirements.txt
 python gui_client.py
 ```
@@ -81,7 +81,7 @@ python gui_client.py
 
 3. **Python Packages:**
    ```bash
-   cd cat-python/server
+   cd server
    pip install -r requirements.txt
    ```
 
@@ -106,7 +106,7 @@ python gui_client.py
 
 3. **Weitere Dependencies:**
    ```powershell
-   cd cat-python\client
+   cd client
    pip install -r requirements.txt
    ```
 
@@ -218,7 +218,7 @@ telnet 192.168.1.100 8765
 ### 💻 **Lokaler Kamera-Modus**
 
 ```powershell
-cd cat-python\client
+cd client
 python gui_client.py
 ```
 
@@ -239,13 +239,13 @@ python gui_client.py
 
 1. **Server starten:**
    ```bash
-   cd cat-python/server
+   cd server
    python camera_server.py
    ```
 
 2. **Client starten:**
    ```powershell
-   cd cat-python\client
+   cd client
    python gui_client.py
    ```
 

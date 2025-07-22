@@ -14,12 +14,12 @@ Das modernste Cat Tracking System mit CUDA-beschleunigter YOLO-Erkennung und pr�
 ### 🔧 Schnellstart
 ```bash
 # Client (PC mit NVIDIA GPU)
-cd cat-python/client
+cd client
 pip install -r requirements.txt
 python gui_client.py
 
 # Server (Raspberry Pi - optional)
-cd cat-python/server  
+cd server  
 pip install -r requirements.txt
 python camera_server.py
 ```
@@ -33,7 +33,7 @@ python camera_server.py
 | RTX 3060 | 40-60 FPS | ✅ Gut |
 
 ### 📖 Vollständige Anleitung
-Siehe [INSTALLATION.md](cat-python/INSTALLATION.md) für detaillierte Setup-Anweisungen.
+Siehe [INSTALLATION.md](INSTALLATION.md) für detaillierte Setup-Anweisungen.
 
 ---
 **⚡ Powered by CUDA + PyTorch + Ultralytics YOLO**
