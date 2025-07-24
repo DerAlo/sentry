@@ -125,12 +125,12 @@ class NetworkClient:
                     # Look for JPEG frames in the stream
                     while True:
                         # Find JPEG start
-                        start = buffer.find(b'\\xff\\xd8')
+                        start = buffer.find(b'\xff\xd8')
                         if start == -1:
                             break
                         
                         # Find JPEG end
-                        end = buffer.find(b'\\xff\\xd9', start + 2)
+                        end = buffer.find(b'\xff\xd9', start + 2)
                         if end == -1:
                             break
                         

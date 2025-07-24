@@ -45,7 +45,7 @@ class CatTrackingGUI:
         
         # Components
         self.yolo_tracker = CudaYoloTracker()
-        self.network_client = NetworkClient()
+        self.network_client = None  # Will be created dynamically with user IP
         self.local_camera = LocalCameraSource()
         
         # Mode selection
@@ -71,6 +71,7 @@ class CatTrackingGUI:
         self.last_status_message = ""     # Avoid duplicate status messages
         self.last_servo_command_time = 0  # Track servo command timing
         self.servo_center_reported = False  # Track if center position was reported
+        
         # Combat controls (like Java version)
         self.fire_enabled = tk.BooleanVar(value=False)
         self.video_recording = tk.BooleanVar(value=False)
@@ -86,6 +87,10 @@ class CatTrackingGUI:
         self.load_yolo_model()
         
         logger.info("🚀 Enhanced Cat Tracking GUI initialized")
+    
+    def is_network_connected(self):
+        """Helper to check if network client is connected"""
+        return self.network_client is not None and self.network_client.is_connected()
     
     def setup_ui(self):
         """Setup the enhanced user interface"""
@@ -125,6 +130,15 @@ class CatTrackingGUI:
                                        variable=self.source_var, value="network",
                                        command=self.on_source_change)
         network_radio.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Server IP input
+        ip_frame = ttk.Frame(source_frame)
+        ip_frame.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Label(ip_frame, text="Server IP:").pack(side=tk.LEFT)
+        self.server_ip_var = tk.StringVar(value="pi3b")
+        self.server_ip_entry = ttk.Entry(ip_frame, textvariable=self.server_ip_var, width=15)
+        self.server_ip_entry.pack(side=tk.LEFT, padx=(5, 0))
         
         local_radio = ttk.Radiobutton(source_frame, text="📹 Local Camera",
                                      variable=self.source_var, value="local",
@@ -347,7 +361,7 @@ class CatTrackingGUI:
             # Local mode: simulate fire command
             self.update_status("🔥 FIRE! (Simulation)")
             messagebox.showinfo("Fire!", "Feuerbefehl ausgeführt! (Simulation)")
-        elif self.network_client.is_connected():
+        elif self.network_client and self.network_client.is_connected():
             # Network mode: send real fire command
             self.update_status("🔥 FIRE! (Real)")
             messagebox.showinfo("Fire!", "Feuerbefehl gesendet!")
@@ -362,7 +376,7 @@ class CatTrackingGUI:
         self.update_status("🎯 Servos zurückgesetzt")
         
         # Send reset command if connected
-        if self.network_client.is_connected():
+        if self.network_client and self.network_client.is_connected():
             task = asyncio.create_task(self.send_servo_async(90, 90))
             self._pending_tasks = getattr(self, '_pending_tasks', [])
             self._pending_tasks.append(task)
@@ -491,7 +505,7 @@ class CatTrackingGUI:
                     self.update_status("❌ Failed to start camera")
         else:
             # Network mode (original logic)
-            if self.network_client.is_connected():
+            if self.network_client and self.network_client.is_connected():
                 # Disconnect
                 task = asyncio.create_task(self.disconnect_server())
                 # Keep reference to prevent garbage collection
@@ -544,7 +558,16 @@ class CatTrackingGUI:
         """Connect to server in background"""
         async def connect_worker():
             try:
-                self.root.after(0, lambda: self.update_status("Connecting to server..."))
+                # Get server IP from input field
+                server_ip = self.server_ip_var.get().strip()
+                if not server_ip:
+                    self.root.after(0, lambda: self.update_status("❌ Please enter server IP"))
+                    return
+                
+                # Create new network client with user IP
+                self.network_client = NetworkClient(server_host=server_ip, http_port=8080, websocket_port=8081)
+                
+                self.root.after(0, lambda: self.update_status(f"Connecting to {server_ip}..."))
                 
                 # Connect WebSocket
                 if await self.network_client.connect_websocket():
@@ -552,7 +575,7 @@ class CatTrackingGUI:
                     self.network_client.start_video_stream(self.on_frame_received)
                     
                     self.root.after(0, lambda: self.connect_btn.config(text="🔌 Disconnect"))
-                    self.root.after(0, lambda: self.update_status("✅ Connected to server"))
+                    self.root.after(0, lambda: self.update_status(f"✅ Connected to {server_ip}"))
                 else:
                     self.root.after(0, lambda: self.update_status("❌ Failed to connect"))
                     
@@ -574,6 +597,7 @@ class CatTrackingGUI:
     
     def on_frame_received(self, frame: np.ndarray):
         """Handle received video frame"""
+        logger.info(f"📹 Frame received: {frame.shape if frame is not None else 'None'}")
         self.current_frame = frame
         
         # Run YOLO detection if tracking enabled
@@ -918,19 +942,19 @@ class CatTrackingGUI:
         """Toggle YOLO tracking"""
         if self.tracking_enabled:
             self.tracking_enabled = False
-            self.toggle_tracking_btn.config(text="▶️ Start Tracking")
+            self.tracking_btn.config(text="🎯 Start Tracking")
             self.update_status("YOLO tracking stopped")
         else:
             if self.yolo_tracker.model is None:
                 if self.yolo_tracker.initialize():
                     self.tracking_enabled = True
-                    self.toggle_tracking_btn.config(text="⏸️ Stop Tracking")
+                    self.tracking_btn.config(text="⏸️ Stop Tracking")
                     self.update_status("YOLO tracking started")
                 else:
                     self.update_status("❌ Failed to initialize YOLO model")
             else:
                 self.tracking_enabled = True
-                self.toggle_tracking_btn.config(text="⏸️ Stop Tracking")
+                self.tracking_btn.config(text="⏸️ Stop Tracking")
                 self.update_status("YOLO tracking started")
     
     def toggle_overlays(self):
@@ -1107,8 +1131,15 @@ class CatTrackingGUI:
             # Cleanup
             if self.video_writer:
                 self.video_writer.release()
-            if self.network_client.is_connected():
-                asyncio.run(self.network_client.disconnect())
+            if self.network_client and self.network_client.is_connected():
+                try:
+                    # Use sync disconnect instead of async
+                    self.network_client.stop_video_stream()
+                    if self.network_client.websocket:
+                        # Close websocket synchronously
+                        self.network_client.connected = False
+                except Exception as e:
+                    logger.warning(f"Cleanup error: {e}")
 
 def main():
     """Main entry point"""
