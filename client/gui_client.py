@@ -942,7 +942,7 @@ class CatTrackingGUI:
         
         # Send reset command to server via HTTP (synchronous)
         if self.network_client.is_connected():
-            self.network_client.send_servo_command(90, 90)
+            self.network_client.send_servo_command_sync(90, 90)
     
     def toggle_tracking(self):
         """Toggle YOLO tracking"""

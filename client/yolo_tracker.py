@@ -151,8 +151,10 @@ class CudaYoloTracker:
         start_time = time.time()
         
         try:
+            # Konvertiere BGR (OpenCV) zu RGB (YOLO erwartet RGB)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             # Run inference with CUDA
-            results = self.model(frame, conf=self.confidence, verbose=False)
+            results = self.model(rgb_frame, conf=self.confidence, verbose=False)
             
             detections = []
             
