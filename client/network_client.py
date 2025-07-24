@@ -88,6 +88,32 @@ class NetworkClient:
             logger.error(f"❌ Servo command failed: {e}")
             return False
     
+    def send_servo_command_sync(self, x_angle: float, y_angle: float) -> bool:
+        """Send servo command synchronously via HTTP"""
+        if not self.connected:
+            return False
+        
+        try:
+            # Use HTTP instead of WebSocket for servo commands
+            servo_url = f"http://{self.server_host}:{self.http_port}/servo"
+            data = {
+                "x_angle": x_angle,
+                "y_angle": y_angle,
+                "timestamp": time.time()
+            }
+            
+            response = requests.post(servo_url, json=data, timeout=5)
+            success = response.status_code == 200
+            
+            if success:
+                logger.debug(f"Servo command sent: X={x_angle:.1f}°, Y={y_angle:.1f}°")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"❌ HTTP servo command failed: {e}")
+            return False
+    
     def start_video_stream(self, frame_callback: Callable[[np.ndarray], None]):
         """Start receiving video stream from server"""
         self.frame_callback = frame_callback
@@ -112,18 +138,19 @@ class NetworkClient:
                     time.sleep(1)
                     continue
                 
-                # Parse multipart stream
+                # Parse multipart stream with larger chunks for better performance
                 boundary = None
                 buffer = b''
                 
-                for chunk in response.iter_content(chunk_size=1024):
+                for chunk in response.iter_content(chunk_size=8192):  # Larger chunks
                     if not self.streaming:
                         break
                     
                     buffer += chunk
                     
-                    # Look for JPEG frames in the stream
-                    while True:
+                    # Process multiple frames if available
+                    frames_processed = 0
+                    while frames_processed < 5:  # Limit frames per chunk to prevent blocking
                         # Find JPEG start
                         start = buffer.find(b'\xff\xd8')
                         if start == -1:
@@ -137,6 +164,7 @@ class NetworkClient:
                         # Extract JPEG frame
                         jpeg_data = buffer[start:end + 2]
                         buffer = buffer[end + 2:]
+                        frames_processed += 1
                         
                         # Decode frame
                         try:

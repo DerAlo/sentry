@@ -14,7 +14,7 @@ from typing import Dict, Any
 
 import cv2
 import websockets
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request
 import threading
 import queue
 
@@ -62,6 +62,7 @@ class CameraServer:
                 "status": "running",
                 "endpoints": {
                     "stream": "/stream",
+                    "servo": "/servo",
                     "websocket": f"ws://localhost:{self.config.get('websocket_port', 8081)}/servo"
                 }
             })
@@ -73,6 +74,33 @@ class CameraServer:
                 self.generate_frames(),
                 mimetype='multipart/x-mixed-replace; boundary=frame'
             )
+        
+        @self.flask_app.route('/servo', methods=['POST'])
+        def servo_command():
+            """HTTP servo control endpoint - alternative to WebSocket"""
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({"success": False, "error": "No JSON data"}), 400
+                
+                x_angle = float(data.get('x_angle', 90))
+                y_angle = float(data.get('y_angle', 90))
+                
+                # Send command to Arduino
+                success = self.serial_controller.send_servo_command(x_angle, y_angle)
+                
+                logger.debug(f"🎛️ HTTP Servo: X={x_angle}°, Y={y_angle}° -> {success}")
+                
+                return jsonify({
+                    "success": success,
+                    "x_angle": x_angle,
+                    "y_angle": y_angle,
+                    "timestamp": time.time()
+                })
+                
+            except Exception as e:
+                logger.error(f"HTTP servo error: {e}")
+                return jsonify({"success": False, "error": str(e)}), 500
     
     def init_camera(self) -> bool:
         """Initialize camera with optimized settings"""
@@ -80,8 +108,13 @@ class CameraServer:
             camera_device = self.config.get('camera_device', 0)
             logger.info(f"📹 Initializing camera device: {camera_device}")
             
-            self.camera = cv2.VideoCapture(camera_device)
+            # Try V4L2 backend first (works on Pi)
+            self.camera = cv2.VideoCapture(camera_device, cv2.CAP_V4L2)
             
+            if not self.camera.isOpened():
+                logger.warning(f"V4L2 failed, trying default backend...")
+                self.camera = cv2.VideoCapture(camera_device)
+                
             if not self.camera.isOpened():
                 logger.error(f"Failed to open camera device: {camera_device}")
                 return False
@@ -91,17 +124,28 @@ class CameraServer:
             height = self.config.get('camera_height', 480)
             fps = self.config.get('camera_fps', 30)
             
+            # Set MJPEG format for better performance (test showed this works)
+            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
             self.camera.set(cv2.CAP_PROP_FPS, fps)
             self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Low latency
             
+            # Test reading a frame to ensure camera works
+            ret, test_frame = self.camera.read()
+            if not ret or test_frame is None:
+                logger.error("❌ Camera opened but cannot read frames")
+                self.camera.release()
+                return False
+            
             # Verify settings
             actual_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
             actual_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
             actual_fps = self.camera.get(cv2.CAP_PROP_FPS)
+            fourcc = int(self.camera.get(cv2.CAP_PROP_FOURCC))
+            fourcc_str = ''.join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
             
-            logger.info(f"📹 Camera connected: {actual_width}x{actual_height} @ {actual_fps}fps")
+            logger.info(f"📹 Camera connected: {actual_width}x{actual_height} @ {actual_fps}fps ({fourcc_str})")
             return True
             
         except Exception as e:
@@ -250,7 +294,7 @@ class CameraServer:
             websocket_port = self.config.get('websocket_port', 8081)
             websocket_server = websockets.serve(
                 self.handle_websocket_servo, 
-                'localhost', 
+                '0.0.0.0', 
                 websocket_port
             )
             

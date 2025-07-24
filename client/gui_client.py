@@ -53,7 +53,7 @@ class CatTrackingGUI:
         
         # State
         self.current_frame = None
-        self.tracking_enabled = False
+        self.tracking_enabled = True  # Start with YOLO enabled
         self.overlays_enabled = True
         self.target_object = None
         self.detections = []
@@ -163,7 +163,7 @@ class CatTrackingGUI:
                                      command=self.toggle_connection)
         self.connect_btn.pack(side=tk.LEFT)
         
-        self.tracking_btn = ttk.Button(controls_frame, text="🎯 Start Tracking",
+        self.tracking_btn = ttk.Button(controls_frame, text="⏸️ Stop Tracking",
                                       command=self.toggle_tracking)
         self.tracking_btn.pack(side=tk.LEFT, padx=(5, 0))
         
@@ -597,7 +597,6 @@ class CatTrackingGUI:
     
     def on_frame_received(self, frame: np.ndarray):
         """Handle received video frame"""
-        logger.info(f"📹 Frame received: {frame.shape if frame is not None else 'None'}")
         self.current_frame = frame
         
         # Run YOLO detection if tracking enabled
@@ -874,10 +873,19 @@ class CatTrackingGUI:
         
         # Send command if connected
         if self.network_client.is_connected():
-            task = asyncio.create_task(self.send_servo_async(x_angle, y_angle))
-            # Keep reference to prevent garbage collection
-            self._pending_tasks = getattr(self, '_pending_tasks', [])
-            self._pending_tasks.append(task)
+            # Use thread for async call instead of asyncio.create_task
+            threading.Thread(
+                target=self._send_servo_thread, 
+                args=(x_angle, y_angle), 
+                daemon=True
+            ).start()
+    
+    def _send_servo_thread(self, x_angle: float, y_angle: float):
+        """Send servo command in thread"""
+        try:
+            self.network_client.send_servo_command_sync(x_angle, y_angle)
+        except Exception as e:
+            logger.error(f"Servo command error: {e}")
     
     def start_video_recording(self):
         """Start video recording when enemy detected (like Java version)"""
@@ -932,11 +940,9 @@ class CatTrackingGUI:
         self.update_status("🔄 Servos reset to center position", force_log=True)
         self.servo_center_reported = True  # Mark as reported
         
-        # Send reset command to server
+        # Send reset command to server via HTTP (synchronous)
         if self.network_client.is_connected():
-            task = asyncio.create_task(self.send_servo_async(90, 90))
-            self._pending_tasks = getattr(self, '_pending_tasks', [])
-            self._pending_tasks.append(task)
+            self.network_client.send_servo_command(90, 90)
     
     def toggle_tracking(self):
         """Toggle YOLO tracking"""
@@ -961,10 +967,10 @@ class CatTrackingGUI:
         """Toggle detection overlays"""
         self.overlays_enabled = not self.overlays_enabled
         if self.overlays_enabled:
-            self.toggle_overlays_btn.config(text="🔍 Hide Overlays")
+            self.overlays_btn.config(text="🔍 Hide Overlays")
             self.update_status("Detection overlays enabled")
         else:
-            self.toggle_overlays_btn.config(text="🔍 Show Overlays")
+            self.overlays_btn.config(text="🔍 Show Overlays")
             self.update_status("Detection overlays disabled")
     
     def add_friend(self):
